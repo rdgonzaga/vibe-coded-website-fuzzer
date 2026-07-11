@@ -1,0 +1,52 @@
+# ==============================
+# Visual Studio Code Settings
+# ==============================
+.vscode/
+*.code-workspace
+
+# ==============================
+# Operating System Junk
+# ==============================
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Linux
+*~
+.fuse_hidden*
+.directory
+.Trash-*
+.nfs*
+
+# ==============================
+# Build & Output Folders
+# ==============================
+dist/
+build/
+out/
+bin/
+obj/
+*.pid
+*.seed
+*.log
+
+# ==============================
+# Local Environment
+# ==============================
+.env
+.env.local
+.env.*.local
+*.env
+
+# ==============================
+# Dependencies (Optional)
+# ==============================
+node_modules/
+bower_components/
+vendor/
