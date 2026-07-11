@@ -1,0 +1,1 @@
+insert the python dependencies needed once the project is done
