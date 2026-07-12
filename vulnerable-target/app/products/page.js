@@ -28,32 +28,30 @@ export default function ProductsPage() {
   }
 
   return (
-    <main style={{ maxWidth: 640, margin: "80px auto", fontFamily: "sans-serif" }}>
-      <h1>Products</h1>
-      <form onSubmit={search} style={{ marginBottom: 16 }}>
+    <div className="page page-wide">
+      <h1 className="page-title">Products</h1>
+      <p className="page-subtitle">Search the catalog below.</p>
+      <form onSubmit={search} className="search-bar">
         <input
-          style={{ width: "70%", padding: 8 }}
           placeholder="Search products..."
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        <button style={{ padding: 8, marginLeft: 8 }} type="submit">
-          Search
-        </button>
+        <button type="submit">Search</button>
       </form>
       {sql && (
-        <p style={{ fontSize: 12, color: "#888" }}>
+        <div className="sql-preview">
           Executed SQL (shown for the demo): <code>{sql}</code>
-        </p>
+        </div>
       )}
-      {error && <p style={{ color: "red" }}>{error}</p>}
-      <ul>
+      {error && <div className="alert alert-error">{error}</div>}
+      <ul className="result-list">
         {results.map((p) => (
-          <li key={p.id ?? JSON.stringify(p)}>
+          <li key={p.id ?? JSON.stringify(p)} className="result-row">
             {JSON.stringify(p)}
           </li>
         ))}
       </ul>
-    </main>
+    </div>
   );
 }

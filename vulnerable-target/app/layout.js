@@ -1,4 +1,5 @@
 import "./globals.css";
+import Navbar from "./components/Navbar";
 
 export const metadata = {
   title: "Vuln-Shop (intentionally vulnerable demo)",
@@ -8,7 +9,13 @@ export const metadata = {
 export default function RootLayout({ children }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <Navbar />
+        <div className="page-shell">{children}</div>
+        <p className="footer-note">
+          ⚠️ Intentionally vulnerable demo app — educational use only, see README.md
+        </p>
+      </body>
     </html>
   );
 }

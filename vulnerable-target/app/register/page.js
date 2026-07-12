@@ -35,26 +35,30 @@ export default function RegisterPage() {
   }
 
   return (
-    <main style={{ maxWidth: 360, margin: "80px auto", fontFamily: "sans-serif" }}>
-      <h1>Create account</h1>
-      <form onSubmit={handleSubmit}>
-        {["email", "password", "name", "address"].map((field) => (
-          <div key={field} style={{ marginBottom: 12 }}>
-            <label>{field}</label>
-            <br />
-            <input
-              style={{ width: "100%", padding: 8 }}
-              type={field === "password" ? "password" : "text"}
-              value={form[field]}
-              onChange={(e) => setForm({ ...form, [field]: e.target.value })}
-            />
-          </div>
-        ))}
-        {error && <p style={{ color: "red" }}>{String(error)}</p>}
-        <button style={{ width: "100%", padding: 10 }} type="submit">
-          Register
-        </button>
-      </form>
-    </main>
+    <div className="page page-form">
+      <div className="card">
+        <h1 className="page-title">Create account</h1>
+        <p className="page-subtitle">Join Vuln-Shop to start shopping.</p>
+        <form onSubmit={handleSubmit}>
+          {["email", "password", "name", "address"].map((field) => (
+            <div key={field} className="field">
+              <label>{field}</label>
+              <input
+                type={field === "password" ? "password" : "text"}
+                value={form[field]}
+                onChange={(e) => setForm({ ...form, [field]: e.target.value })}
+              />
+            </div>
+          ))}
+          {error && <div className="alert alert-error">{String(error)}</div>}
+          <button className="btn" type="submit">
+            Register
+          </button>
+        </form>
+        <p className="hint">
+          Already have an account? <a href="/login">Log in</a>
+        </p>
+      </div>
+    </div>
   );
 }

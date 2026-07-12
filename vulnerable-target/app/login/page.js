@@ -45,40 +45,35 @@ export default function LoginPage() {
   }
 
   return (
-    <main style={{ maxWidth: 360, margin: "80px auto", fontFamily: "sans-serif" }}>
-      <h1>Sign in</h1>
-      <p style={{ fontSize: 12, color: "#b00" }}>
-        Demo accounts: alice@example.com / password123, bob@example.com / letmein,
-        admin@example.com / admin123
-      </p>
-      <form onSubmit={handleSubmit}>
-        <div style={{ marginBottom: 12 }}>
-          <label>Email</label>
-          <br />
-          <input
-            style={{ width: "100%", padding: 8 }}
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
+    <div className="page page-form">
+      <div className="card">
+        <h1 className="page-title">Sign in</h1>
+        <div className="alert alert-warning" style={{ fontSize: 12 }}>
+          Demo accounts: alice@example.com / password123, bob@example.com / letmein,
+          admin@example.com / admin123
         </div>
-        <div style={{ marginBottom: 12 }}>
-          <label>Password</label>
-          <br />
-          <input
-            style={{ width: "100%", padding: 8 }}
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </div>
-        {error && <p style={{ color: "red" }}>{error}</p>}
-        <button style={{ width: "100%", padding: 10 }} type="submit">
-          Log in
-        </button>
-      </form>
-      <p style={{ marginTop: 16 }}>
-        No account? <a href="/register">Register</a>
-      </p>
-    </main>
+        <form onSubmit={handleSubmit}>
+          <div className="field">
+            <label>Email</label>
+            <input value={email} onChange={(e) => setEmail(e.target.value)} />
+          </div>
+          <div className="field">
+            <label>Password</label>
+            <input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </div>
+          {error && <div className="alert alert-error">{error}</div>}
+          <button className="btn" type="submit">
+            Log in
+          </button>
+        </form>
+        <p className="hint">
+          No account? <a href="/register">Register</a>
+        </p>
+      </div>
+    </div>
   );
 }

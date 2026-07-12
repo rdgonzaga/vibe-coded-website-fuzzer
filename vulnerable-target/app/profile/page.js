@@ -35,11 +35,9 @@ function ProfileInner() {
 
   return (
     <>
-      {error && <p style={{ color: "red" }}>{error}</p>}
+      {error && <div className="alert alert-error">{error}</div>}
       {profile && (
-        <pre style={{ background: "#f4f4f4", padding: 16 }}>
-          {JSON.stringify(profile, null, 2)}
-        </pre>
+        <pre className="json-block">{JSON.stringify(profile, null, 2)}</pre>
       )}
     </>
   );
@@ -47,18 +45,20 @@ function ProfileInner() {
 
 export default function ProfilePage() {
   return (
-    <main style={{ maxWidth: 480, margin: "80px auto", fontFamily: "sans-serif" }}>
-      <h1>Profile</h1>
-      <p style={{ fontSize: 12, color: "#b00" }}>
-        Try changing the id in the URL (?id=1, ?id=2, ?id=3) while logged in as
-        someone else — the API doesn&apos;t check ownership.
-      </p>
-      <Suspense fallback={<p>Loading...</p>}>
-        <ProfileInner />
-      </Suspense>
-      <p>
-        <a href="/products">Browse products →</a>
-      </p>
-    </main>
+    <div className="page page-narrow">
+      <div className="card">
+        <h1 className="page-title">Profile</h1>
+        <div className="alert alert-warning" style={{ fontSize: 12 }}>
+          Try changing the id in the URL (?id=1, ?id=2, ?id=3) while logged in as
+          someone else — the API doesn&apos;t check ownership.
+        </div>
+        <Suspense fallback={<p className="page-subtitle">Loading...</p>}>
+          <ProfileInner />
+        </Suspense>
+        <p className="hint">
+          <a href="/products">Browse products →</a>
+        </p>
+      </div>
+    </div>
   );
 }
