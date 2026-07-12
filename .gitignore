@@ -50,3 +50,23 @@ obj/
 node_modules/
 bower_components/
 vendor/
+
+# ==============================
+# Python
+# ==============================
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+
+# ==============================
+# Next.js / vulnerable-target
+# ==============================
+.next/
+*.db
+*.sqlite
+*.sqlite3
