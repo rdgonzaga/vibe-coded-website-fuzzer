@@ -1,0 +1,4 @@
+{
+  "target_extensions": [".js", ".ts", ".tsx", ".jsx", ".env", ".env.local"],
+  "ignore_dirs": ["node_modules", ".git", ".next", "dist", "build"]
+}
