@@ -1,6 +1,7 @@
 import os
 import argparse
 import json
+import re
 
 def load_config(config_path="tool/scanner_config.json"):
     """
@@ -42,6 +43,44 @@ def get_files_to_scan(target_dir, config):
 
     return files_to_scan
 
+def scan_for_secrets(file_path):
+    """
+    Reads a file line-by-line and applies regex to find hardcoded secrets.
+    """
+    # Rule 1: Catch variable names like secret, password, token, or api_key being assigned a string
+    context_regex = re.compile(r'(?i)(password|secret|api_key|apikey|token)\s*[:=]\s*[\'"]([^\'"]+)[\'"]')
+    
+    # Rule 2: Catch strict token formats (e.g., sk- followed by 32 alphanumeric characters)
+    format_regex = re.compile(r'sk-[a-zA-Z0-9]{32}')
+    
+    findings = []
+
+    try:
+        # Open the file and read it line by line
+        with open(file_path, 'r', encoding='utf-8') as file:
+            for line_number, line in enumerate(file, 1):
+                
+                # Check Rule 1
+                if context_regex.search(line):
+                    findings.append({
+                        "type": "Predictable Variable Name",
+                        "line": line_number,
+                        "content": line.strip()[:100] # Truncate so we don't print massive lines
+                    })
+                
+                # Check Rule 2
+                if format_regex.search(line):
+                    findings.append({
+                        "type": "Exposed API Token (sk- format)",
+                        "line": line_number,
+                        "content": line.strip()[:100]
+                    })
+                    
+    except Exception as e:
+        pass 
+
+    return findings
+
 def main():
     parser = argparse.ArgumentParser(description="Vibe Fuzzer SAST Module: Static Code Scanner")
     parser.add_argument("--dir", required=True, help="Path to the application directory you want to scan")
@@ -54,16 +93,24 @@ def main():
         return
 
     print(f"[*] Initializing scan on directory: {target_directory}")
-    
-    # Load the config
     config = load_config()
-    
-    # Pass the config to the scanner
     files = get_files_to_scan(target_directory, config)
+
+    print(f"[*] Found {len(files)} relevant files to scan.\n")
+    print("[*] Starting Search...")
+    total_secrets_found = 0
     
-    print(f"[*] Found {len(files)} relevant files to scan.")
-    for f in files:
-        print(f" -> {f}")
+    # Loop through the files we found and scan them
+    for file_path in files:
+        secrets_found = scan_for_secrets(file_path)
+        
+        if secrets_found:
+            print(f"\n[!] WARNING: Potential secrets found in: {file_path}")
+            for secret in secrets_found:
+                print(f"    -> Line {secret['line']} | Type: {secret['type']}")
+                total_secrets_found += 1
+
+    print(f"\n[*] Secrets scan complete. Total potential secrets found: {total_secrets_found}")
 
 if __name__ == "__main__":
     main()
