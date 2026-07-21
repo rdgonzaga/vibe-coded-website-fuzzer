@@ -4,12 +4,43 @@ this is just a skeleton / template idk how to do this yet
 
 import argparse
 import json
+from typing import Optional
+
+import requests
 
 
 class DynamicFuzzer:
 
     def __init__(self, base_url: str = "http://localhost:3000"):
         self.base_url = base_url.rstrip("/")
+
+    def login(self, email: str, password: str) -> Optional[str]:
+        """
+        log in as a seeded user and return their JWT 
+        so the other tests have a real token to work with.
+
+        posts to /api/auth/login. returns the token string on success,
+        or None if the login failed.
+        """
+        url = f"{self.base_url}/api/auth/login"
+        print(f"[*] logging in as {email}")
+
+        try:
+            response = requests.post(url, json={"email": email, "password": password})
+        except requests.RequestException as e:
+            print(f"[!] login request failed: {e}")
+            return None
+
+        if response.status_code != 200:
+            print(f"[!] login failed ({response.status_code}): {response.text[:200]}")
+            return None
+
+        token = response.json().get("token")
+        if not token:
+            print("[!] login succeeded but no token in response")
+            return None
+
+        return token
 
     def map_endpoints_to_localhost(self, endpoints: list) -> list:
         """
