@@ -4,6 +4,7 @@ this is just a skeleton / template idk how to do this yet
 
 import argparse
 import json
+from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 import requests
@@ -17,10 +18,10 @@ class DynamicFuzzer:
     def login(self, email: str, password: str) -> Optional[str]:
         """
         log in as a seeded user and return their JWT 
-        so the other tests have a real token to work with.
 
-        posts to /api/auth/login. returns the token string on success,
-        or None if the login failed.
+        posts to /api/auth/login
+        returns the token string on success,
+        none if the login failed.
         """
         url = f"{self.base_url}/api/auth/login"
         print(f"[*] logging in as {email}")
@@ -62,18 +63,40 @@ class DynamicFuzzer:
         spam the login endpoint a bunch of times and see if it ever blocks us
 
         if the site has rate limiting, we should start getting 429 errors
-        after a while. 
+        after a while.
         """
+        url = f"{self.base_url}{endpoint}"
         print(f"[*] sending {request_count} requests to {endpoint}")
+
+        # deliberately wrong password: we're testing throttling, not trying
+        # to actually log in, and this avoids the noise of successful logins
+        payload = {"email": "alice@example.com", "password": "not-the-real-password"}
+
+        def fire_one(_) -> Optional[int]:
+            try:
+                response = requests.post(url, json=payload)
+                return response.status_code
+            except requests.RequestException as e:
+                print(f"[!] request failed: {e}")
+                return None
+
+        with ThreadPoolExecutor(max_workers=20) as pool:
+            status_codes = list(pool.map(fire_one, range(request_count)))
+
+        requests_sent = sum(1 for code in status_codes if code is not None)
+        rate_limited_count = sum(1 for code in status_codes if code == 429)
+
         results = {
             "endpoint": endpoint,
-            "requests_sent": 0,
-            "rate_limited": False,
-            "notes": "not implemented yet",
+            "requests_sent": requests_sent,
+            "rate_limited": rate_limited_count > 0,
+            "rate_limited_count": rate_limited_count,
+            "notes": (
+                f"got {rate_limited_count} HTTP 429 response(s) out of {requests_sent}"
+                if rate_limited_count > 0
+                else "no 429s seen - endpoint does not appear to be rate-limited"
+            ),
         }
-        # TODO: send a bunch of requests in a loop (requests or aiohttp)
-        # TODO: count how many times we get a 429 back
-        pass
         return results
 
     def test_idor_token_swap(self, endpoint_pattern: str, session_token: str, target_id: str) -> dict:
