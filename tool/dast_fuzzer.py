@@ -19,14 +19,24 @@ class DynamicFuzzer:
         self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
 
-    def login(self, email: str, password: str) -> Optional[str]:
-        """Log in and return the JWT, or None on failure."""
-        url = f"{self.base_url}/api/auth/login"
+    # common field names other vibe-coded sites use for a returned token
+    _TOKEN_KEYS = ("token", "access_token", "accessToken", "jwt", "authToken")
+
+    def login(
+        self,
+        email: str,
+        password: str,
+        endpoint: str = "/api/auth/login",
+        email_field: str = "email",
+        password_field: str = "password",
+    ) -> Optional[str]:
+        """Log in and return the token, or None on failure."""
+        url = f"{self.base_url}{endpoint}"
         print(f"[*] logging in as {email}")
 
         try:
             response = self.session.post(
-                url, json={"email": email, "password": password}, timeout=DEFAULT_TIMEOUT
+                url, json={email_field: email, password_field: password}, timeout=DEFAULT_TIMEOUT
             )
         except requests.RequestException as e:
             print(f"[!] login request failed: {e}")
@@ -36,12 +46,18 @@ class DynamicFuzzer:
             print(f"[!] login failed ({response.status_code}): {response.text[:200]}")
             return None
 
-        token = response.json().get("token")
-        if not token:
-            print("[!] login succeeded but no token in response")
+        try:
+            body = response.json()
+        except ValueError:
+            print("[!] login succeeded but response wasn't JSON (cookie-based auth?)")
             return None
 
-        return token
+        for key in self._TOKEN_KEYS:
+            if body.get(key):
+                return body[key]
+
+        print(f"[!] login succeeded but no recognizable token field ({', '.join(self._TOKEN_KEYS)})")
+        return None
 
     def map_endpoints_to_localhost(self, endpoints: list) -> list:
         """
@@ -58,33 +74,55 @@ class DynamicFuzzer:
         pass
         return mapped
 
-    def test_rate_limiting(self, endpoint: str, request_count: int = 100) -> dict:
+    def test_rate_limiting(
+        self,
+        endpoint: str,
+        request_count: int = 100,
+        email: str = "test@example.com",
+        password: str = "wrong-password-on-purpose",
+        email_field: str = "email",
+        password_field: str = "password",
+    ) -> dict:
         """Fire concurrent requests at endpoint and count HTTP 429s."""
         url = f"{self.base_url}{endpoint}"
         print(f"[*] sending {request_count} requests to {endpoint}")
 
-        # wrong password on purpose - testing throttling, not logging in
-        payload = {"email": "alice@example.com", "password": "not-the-real-password"}
+        payload = {email_field: email, password_field: password}
 
-        def fire_one(_) -> Optional[int]:
+        def fire_one(_):
             try:
                 response = self.session.post(url, json=payload, timeout=DEFAULT_TIMEOUT)
-                return response.status_code
+                return response.status_code, response.text
             except requests.RequestException as e:
                 print(f"[!] request failed: {e}")
-                return None
+                return None, None
 
         with ThreadPoolExecutor(max_workers=20) as pool:
-            status_codes = list(pool.map(fire_one, range(request_count)))
+            responses = list(pool.map(fire_one, range(request_count)))
 
-        requests_sent = sum(1 for code in status_codes if code is not None)
+        status_codes = [code for code, _ in responses if code is not None]
+        requests_sent = len(status_codes)
         rate_limited_count = sum(1 for code in status_codes if code == 429)
+
+        # a target crashing under load is itself a finding worth catching,
+        # on any site - not just this one
+        leaks = []
+        seen = set()
+        for code, text in responses:
+            if code is None or code < 500:
+                continue
+            for leak in self.check_error_leaks(code, text):
+                key = (leak["type"], leak["match"])
+                if key not in seen:
+                    seen.add(key)
+                    leaks.append(leak)
 
         results = {
             "endpoint": endpoint,
             "requests_sent": requests_sent,
             "rate_limited": rate_limited_count > 0,
             "rate_limited_count": rate_limited_count,
+            "leaks_found": leaks,
             "notes": (
                 f"got {rate_limited_count} HTTP 429 response(s) out of {requests_sent}"
                 if rate_limited_count > 0
@@ -143,8 +181,10 @@ class DynamicFuzzer:
         "node_modules path": re.compile(r"[\w./\\-]*node_modules[/\\]+[^\s\"']+"),
         "JS stack trace frame": re.compile(r"at\s+[\w.$<>]+\s*\(?[^\s)\"']+:\d+:\d+\)?"),
         "Database error": re.compile(
-            r"(?i)(SQLITE_[A-Z]+|SqliteError|SqlException|syntax error at or near|ORA-\d{5})"
+            r"(?i)(SQLITE_[A-Z]+|SqliteError|SqlException|psycopg2\.\w+|"
+            r"pymysql\.\w+|MongoServerError|syntax error at or near|ORA-\d{5})"
         ),
+        "Python traceback frame": re.compile(r'File "[^"]+", line \d+'),
     }
 
     def check_error_leaks(self, response_code: int, response_content: str) -> list:
@@ -174,12 +214,20 @@ def main():
     parser = argparse.ArgumentParser(description="Phase 3 - Dynamic Fuzzer (DAST)")
     parser.add_argument("--dir", type=str, help="path to the app we scanned in Phase 2", required=False)
     parser.add_argument("--url", type=str, default="http://localhost:3000", help="local url of the running app")
-    parser.add_argument("--email", type=str, default="alice@example.com", help="seeded account to log in as")
+    parser.add_argument("--email", type=str, default="alice@example.com", help="account to log in as")
     parser.add_argument("--password", type=str, default="password123", help="password for --email")
+    parser.add_argument("--email-field", type=str, default="email", help="JSON field name for the login identifier (some sites use 'username')")
+    parser.add_argument("--password-field", type=str, default="password")
     parser.add_argument("--login-endpoint", type=str, default="/api/auth/login")
     parser.add_argument("--profile-endpoint", type=str, default="/api/profile/{id}", help="use {id} as a placeholder")
     parser.add_argument("--other-user-id", type=str, default="2", help="a different user's id, for the IDOR test")
     parser.add_argument("--request-count", type=int, default=100, help="requests to fire for the rate-limit test")
+    parser.add_argument(
+        "--register-endpoint",
+        type=str,
+        default="/api/auth/register",
+        help="endpoint to probe for error leaks; pass '' to skip if the target has no register route",
+    )
     parser.add_argument("--report", type=str, help="write the full JSON results to this file")
     args = parser.parse_args()
 
@@ -189,10 +237,16 @@ def main():
     fuzzer = DynamicFuzzer(base_url=args.url)
     report = {}
 
-    token = fuzzer.login(args.email, args.password)
+    token = fuzzer.login(
+        args.email, args.password, endpoint=args.login_endpoint,
+        email_field=args.email_field, password_field=args.password_field,
+    )
     report["login"] = {"email": args.email, "token_obtained": token is not None}
 
-    report["rate_limiting"] = fuzzer.test_rate_limiting(args.login_endpoint, args.request_count)
+    report["rate_limiting"] = fuzzer.test_rate_limiting(
+        args.login_endpoint, args.request_count, email=args.email,
+        email_field=args.email_field, password_field=args.password_field,
+    )
 
     if token:
         own_profile_endpoint = args.profile_endpoint.replace("{id}", "1")
@@ -201,13 +255,22 @@ def main():
     else:
         print("[!] skipping IDOR/JWT tests - no valid login token")
 
-    # trigger a known error path (duplicate registration) to exercise the leak checker
-    error_response = fuzzer.session.post(
-        f"{fuzzer.base_url}/api/auth/register",
-        json={"email": args.email, "password": "x", "name": "x", "address": "x"},
-        timeout=DEFAULT_TIMEOUT,
-    )
-    report["error_leaks"] = fuzzer.check_error_leaks(error_response.status_code, error_response.text)
+    # leaks turned up during the rate-limit burst apply to any target
+    report["error_leaks"] = list(report["rate_limiting"].get("leaks_found", []))
+
+    # optionally also probe a specific endpoint (e.g. a register route that
+    # echoes raw errors) - opt out with --register-endpoint '' on sites
+    # that don't have one, or that use a different request shape
+    if args.register_endpoint:
+        try:
+            probe = fuzzer.session.post(
+                f"{fuzzer.base_url}{args.register_endpoint}",
+                json={args.email_field: args.email, args.password_field: "x", "name": "x", "address": "x"},
+                timeout=DEFAULT_TIMEOUT,
+            )
+            report["error_leaks"] += fuzzer.check_error_leaks(probe.status_code, probe.text)
+        except requests.RequestException as e:
+            print(f"[!] register-endpoint probe failed: {e}")
 
     print("\n--- Summary ---")
     print(json.dumps(report, indent=2))
