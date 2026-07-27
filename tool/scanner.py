@@ -81,6 +81,60 @@ def scan_for_secrets(file_path):
 
     return findings
 
+def scan_jwt_config(file_path):
+    """
+    Reads a file line-by-line and checks for weak JWT configurations.
+    """
+
+    # check if website allows the use of expired tokens
+    ignore_exp_regex = re.compile(r'(?i)ignoreExpiration\s*:\s*true')
+
+    # check if website allows the use of tokens before its set valid time
+    ignore_nb4_regex = re.compile(r'(?i)ignoreNotBefore\s*:\s*true')
+
+    # check if website has no signature verfication
+    alg_none_regex = re.compile(r'(?i)algorithms\s*:\s*\[?[\'"]none[\'"]\]?')
+
+    # checks for common placeholders in jwt.sign/jwt.verify
+    weak_placeholder_regex = re.compile(r'jwt\.(verify|sign)\s*\([^,]+,\s*[\'"](secret|supersecret|your-secret-key|changeme|default|test)[\'"]')
+
+    findings = []
+
+    try:
+        with open(file_path, 'r', encoding='utf=8') as file:
+            for line_number, line in enumerate(file, 1):
+                if ignore_exp_regex.search(line):
+                    findings.append({
+                        "type": "Insecure JWT: ignoreExpiration = true",
+                        "line": line_number,
+                        "content": line.strip()[:100]
+                    }) 
+
+                if ignore_nb4_regex.search(line):
+                    findings.append({
+                        "type": "Insecure JWT: ignoreNotBefore = true",
+                        "line": line_number,
+                        "content": line.strip()[:100]
+                    })
+
+                if alg_none_regex.search(line):
+                    findings.append({
+                        "type": "Insecure JWT: 'none' algorithm accepted",
+                        "line": line_number,
+                        "content": line.strip()[:100]
+                    })
+
+                if weak_placeholder_regex(line):
+                    findings.append({
+                        "type": "Insecure JWT: predictable secret key is hardcoded",
+                        "line": line_number,
+                        "content": line.strip()[:100]
+                    })
+    except Exception as e:
+        pass
+
+    return findings 
+
 def main():
     parser = argparse.ArgumentParser(description="Vibe Fuzzer SAST Module: Static Code Scanner")
     parser.add_argument("--dir", required=True, help="Path to the application directory you want to scan")
@@ -99,10 +153,12 @@ def main():
     print(f"[*] Found {len(files)} relevant files to scan.\n")
     print("[*] Starting Search...")
     total_secrets_found = 0
+    total_weak_config_found = 0
     
     # Loop through the files we found and scan them
     for file_path in files:
         secrets_found = scan_for_secrets(file_path)
+        weak_config_found = scan_jwt_config(file_path)
         
         if secrets_found:
             print(f"\n[!] WARNING: Potential secrets found in: {file_path}")
@@ -110,7 +166,17 @@ def main():
                 print(f"    -> Line {secret['line']} | Type: {secret['type']}")
                 total_secrets_found += 1
 
-    print(f"\n[*] Secrets scan complete. Total potential secrets found: {total_secrets_found}")
+        if weak_config_found:
+            print(f"\n[!] WARNING: Potentially weak JWT configurations found in: {file_path}")
+            for config in weak_config_found:
+                print(f"    -> Line {config['line']} | Type: {config['type']}")
+                total_weak_config_found += 1
+
+    print(f"""[*] Scan complete.
+        Total potential secrets found: {total_secrets_found}
+        Total weak JWT configurations found: {total_weak_config_found}
+    """)
+    
 
 if __name__ == "__main__":
     main()
