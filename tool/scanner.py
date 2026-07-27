@@ -135,6 +135,47 @@ def scan_jwt_config(file_path):
 
     return findings 
 
+def scan_route_logic(file_path):
+    """
+    Parses backend API routing files to check if sensitive endpoints are missing
+    explicit authentication middleware.
+    """
+
+    # only analyze api directories
+    if 'api' not in file_path.lower():
+            return[]
+
+    # feel free to add more
+    sensitive_keywords = ['user', 'admin', 'profile', 'account', 'settings', 'payment', 'billing']
+    auth_keywords = ['middleware', 'isauthenticated', 'requireauth', 
+                     'verifytoken', 'getserversession', 'jwt.verify']
+
+    is_sensitive = any(sens_word in file_path.lower() for sens_word in sensitive_keywords)
+
+    if not is_sensitive:
+        return[]
+
+    findings = []
+    has_auth = False
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            content = file.read().lower()
+
+            # check if there's auth logic in file
+            if any(auth_word in content for auth_word in auth_keywords):
+                has_auth = True
+
+        if not has_auth:
+            findings.append({
+                "type": "Missing Route Authorization for Senstive Endpoints",
+                "line": 1,
+                "content": f"File '{os.path.basename(file_path)}' lacks recognized auth checks."
+            })
+    except Exception as e:
+        pass
+
+    
 def main():
     parser = argparse.ArgumentParser(description="Vibe Fuzzer SAST Module: Static Code Scanner")
     parser.add_argument("--dir", required=True, help="Path to the application directory you want to scan")
