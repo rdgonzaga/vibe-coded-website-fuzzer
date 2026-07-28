@@ -96,7 +96,7 @@ def scan_jwt_config(file_path):
     alg_none_regex = re.compile(r'(?i)algorithms\s*:\s*\[?[\'"]none[\'"]\]?')
 
     # checks for common placeholders in jwt.sign/jwt.verify
-    weak_placeholder_regex = re.compile(r'jwt\.(verify|sign)\s*\([^,]+,\s*[\'"](secret|supersecret|your-secret-key|changeme|default|test)[\'"]')
+    weak_placeholder_regex = re.compile(r'jwt\.(verify|sign)\s*\([^,]+,\s*[\'"](supersecret|secret|changeme|123456|default)[\'"]')
 
     findings = []
 
@@ -130,6 +130,13 @@ def scan_jwt_config(file_path):
                         "line": line_number,
                         "content": line.strip()[:100]
                     })
+
+                if 'jwt.sign' in line and 'expiresIn' not in line:
+                    findings.append({
+                        "type": "Insecure JWT: Token created without expiresIn flag",
+                        "line": line_number,
+                        "content": line.strip()[:100]
+                    })
     except Exception as e:
         pass
 
@@ -149,6 +156,8 @@ def scan_route_logic(file_path):
     sensitive_keywords = ['user', 'admin', 'profile', 'account', 'settings', 'payment', 'billing']
     auth_keywords = ['middleware', 'isauthenticated', 'requireauth', 
                      'verifytoken', 'getserversession', 'jwt.verify']
+    ownership_keywords = ['!== decoded.id', '!= user.id', '!== req.user.id', 
+                          'token.id ===', 'user.id ===']
 
     is_sensitive = any(sens_word in file_path.lower() for sens_word in sensitive_keywords)
 
@@ -157,6 +166,8 @@ def scan_route_logic(file_path):
 
     findings = []
     has_auth = False
+    has_owner_check = False
+    is_parameterized = '[id]' in file_path.lower()
 
     try:
         with open(file_path, 'r', encoding='utf-8') as file:
@@ -166,11 +177,21 @@ def scan_route_logic(file_path):
             if any(auth_word in content for auth_word in auth_keywords):
                 has_auth = True
 
+            if any(own_word in content for own_word in ownership_keywords):
+                has_owner_check = True
+
         if not has_auth:
             findings.append({
-                "type": "Missing Route Authorization for Senstive Endpoints",
+                "type": "Missing Route Authentication for Senstive Endpoints",
                 "line": 1,
                 "content": f"File '{os.path.basename(file_path)}' lacks recognized auth checks."
+            })
+
+        if is_parameterized and not has_owner_check:
+            findings.append({
+                "type": "Broken Object-Level (IDOR) Risk",
+                "line": 1,
+                "content": f"File '{os.path.basename(file_path)}' takes [id] parameter but lacks explicit ownership validation." 
             })
     except Exception as e:
         pass
@@ -197,11 +218,14 @@ def main():
     print("[*] Starting Search...")
     total_secrets_found = 0
     total_weak_config_found = 0
+    total_route_flaws_found = 0
     
     # Loop through the files we found and scan them
     for file_path in files:
         secrets_found = scan_for_secrets(file_path)
         weak_config_found = scan_jwt_config(file_path)
+        route_flaw_found = scan_route_logic(file_path)
+
         
         if secrets_found:
             print(f"\n[!] WARNING: Potential secrets found in: {file_path}")
@@ -215,9 +239,16 @@ def main():
                 print(f"    -> Line {weak_config['line']} | Type: {weak_config['type']}")
                 total_weak_config_found += 1
 
-    print(f"""[*] Scan complete.
+        if route_flaw_found:
+            print(f"\n[!] WARNING: Missing authorization controls found in: {file_path}")
+            for flaw in route_flaw_found:
+                print(f"    -> Line {flaw['line']} | Type: {flaw['type']}")
+                total_route_flaws_found += 1
+
+    print(f"""\n[*] Scan complete.
         Total potential secrets found: {total_secrets_found}
         Total weak JWT configurations found: {total_weak_config_found}
+        Total authorization flaws found: {total_route_flaws_found}
     """)
     
 
