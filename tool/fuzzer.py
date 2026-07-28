@@ -6,11 +6,14 @@ import argparse
 import json
 import os
 import re
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
 import jwt
 import requests
+
+warnings.filterwarnings("ignore", category=jwt.InsecureKeyLengthWarning)
 
 DEFAULT_TIMEOUT = 5  # seconds
 
