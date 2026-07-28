@@ -4,10 +4,12 @@ this is just a skeleton / template idk how to do this yet
 
 import argparse
 import json
+import os
 import re
 from concurrent.futures import ThreadPoolExecutor
 from typing import Optional
 
+import jwt
 import requests
 
 DEFAULT_TIMEOUT = 5  # seconds
@@ -21,6 +23,7 @@ class DynamicFuzzer:
 
     # common field names other vibe-coded sites use for a returned token
     _TOKEN_KEYS = ("token", "access_token", "accessToken", "jwt", "authToken")
+    _DYNAMIC_ROUTE = re.compile(r"\[(?:\.\.\.)?[^\]]+\]|\{[^}]+\}|(?<=/):[^/]+")
 
     def login(
         self,
@@ -69,10 +72,51 @@ class DynamicFuzzer:
         """
         print(f"[*] mapping {len(endpoints)} endpoint(s) to localhost urls")
         mapped = []
-        # TODO: loop through endpoints, swap out [id] / [something] for a number
-        # TODO: stick self.base_url in front of the route to make a full url
-        pass
+        for endpoint in endpoints:
+            endpoint = endpoint.strip()
+            if not endpoint:
+                continue
+
+            endpoint = self._DYNAMIC_ROUTE.sub("1", endpoint)
+            if not endpoint.startswith("/"):
+                endpoint = f"/{endpoint}"
+
+            url = f"{self.base_url}{endpoint}"
+            if url not in mapped:
+                mapped.append(url)
+
         return mapped
+
+    def discover_nextjs_endpoints(self, target_dir: str) -> list:
+        """Extract API route paths from Next.js app/api and pages/api folders."""
+        endpoints = []
+
+        for root, dirs, files in os.walk(target_dir):
+            dirs[:] = [name for name in dirs if name not in {".git", ".next", "node_modules"}]
+
+            for filename in files:
+                relative_path = os.path.relpath(os.path.join(root, filename), target_dir)
+                relative_path = relative_path.replace("\\", "/")
+
+                app_route = re.fullmatch(
+                    r"(?:src/)?app/(api/.+)/route\.(?:js|ts|jsx|tsx)", relative_path
+                )
+                pages_route = re.fullmatch(
+                    r"(?:src/)?pages/(api/.+)\.(?:js|ts|jsx|tsx)", relative_path
+                )
+
+                if app_route:
+                    endpoint = f"/{app_route.group(1)}"
+                elif pages_route:
+                    endpoint = f"/{pages_route.group(1)}"
+                    endpoint = re.sub(r"/index$", "", endpoint)
+                else:
+                    continue
+
+                if endpoint not in endpoints:
+                    endpoints.append(endpoint)
+
+        return endpoints
 
     def test_rate_limiting(
         self,
@@ -145,11 +189,44 @@ class DynamicFuzzer:
             "endpoint_pattern": endpoint_pattern,
             "target_id": target_id,
             "idor_detected": False,
-            "notes": "not implemented yet",
+            "status_code": None,
+            "notes": "",
         }
-        # TODO: send request to endpoint_pattern (with target_id in it) using session_token
-        # TODO: if we get a 200 back with someone else's data, mark idor_detected = True
-        pass
+
+        if not self._DYNAMIC_ROUTE.search(endpoint_pattern):
+            results["notes"] = "endpoint pattern has no dynamic ID placeholder"
+            return results
+
+        try:
+            payload = jwt.decode(session_token, options={"verify_signature": False})
+            logged_in_id = payload.get("id") or payload.get("userId") or payload.get("sub")
+        except jwt.PyJWTError:
+            logged_in_id = None
+
+        if logged_in_id is not None and str(logged_in_id) == str(target_id):
+            results["notes"] = "target ID belongs to the logged-in user; choose a different ID"
+            return results
+
+        endpoint = self._DYNAMIC_ROUTE.sub(str(target_id), endpoint_pattern)
+        url = endpoint if endpoint.startswith(("http://", "https://")) else f"{self.base_url}{endpoint}"
+
+        try:
+            response = self.session.get(
+                url,
+                headers={"Authorization": f"Bearer {session_token}"},
+                timeout=DEFAULT_TIMEOUT,
+            )
+        except requests.RequestException as e:
+            results["notes"] = f"request failed: {e}"
+            return results
+
+        results["status_code"] = response.status_code
+        results["idor_detected"] = 200 <= response.status_code < 300
+        results["notes"] = (
+            "another user's endpoint accepted the logged-in user's token"
+            if results["idor_detected"]
+            else "cross-user request was rejected or the target record was not found"
+        )
         return results
 
     def fuzz_jwt_auth(self, endpoint: str, original_token: str) -> dict:
@@ -165,12 +242,59 @@ class DynamicFuzzer:
         results = {
             "endpoint": endpoint,
             "bypass_successful": False,
-            "notes": "not implemented yet",
+            "bypass_method": None,
+            "attempts": [],
+            "notes": "",
         }
-        # TODO: split original_token into header.payload.signature
-        # TODO: build an alg=none version and try it
-        # TODO: try re-signing with a list of common weak secrets
-        pass
+
+        try:
+            payload = jwt.decode(original_token, options={"verify_signature": False})
+        except jwt.PyJWTError as e:
+            results["notes"] = f"token is not a valid JWT: {e}"
+            return results
+
+        url = endpoint if endpoint.startswith(("http://", "https://")) else f"{self.base_url}{endpoint}"
+
+        def try_token(name: str, token: str) -> bool:
+            try:
+                response = self.session.get(
+                    url,
+                    headers={"Authorization": f"Bearer {token}"},
+                    timeout=DEFAULT_TIMEOUT,
+                )
+                accepted = 200 <= response.status_code < 300
+                results["attempts"].append(
+                    {"method": name, "status_code": response.status_code, "accepted": accepted}
+                )
+                return accepted
+            except requests.RequestException as e:
+                results["attempts"].append({"method": name, "error": str(e), "accepted": False})
+                return False
+
+        token_parts = original_token.split(".")
+        if len(token_parts) != 3:
+            results["notes"] = "token is not a three-part JWT"
+            return results
+
+        none_header = jwt.utils.base64url_encode(
+            json.dumps({"alg": "none", "typ": "JWT"}, separators=(",", ":")).encode()
+        ).decode()
+        none_token = f"{none_header}.{token_parts[1]}."
+
+        attempts = [("alg=none", none_token)]
+        for secret in ("secret", "supersecret", "password", "changeme", "jwtsecret"):
+            attempts.append((f"weak secret: {secret}", jwt.encode(payload, secret, algorithm="HS256")))
+
+        for method, token in attempts:
+            if try_token(method, token):
+                results["bypass_successful"] = True
+                results["bypass_method"] = method
+                results["notes"] = f"endpoint accepted a token forged with {method}"
+                break
+
+        if not results["bypass_successful"]:
+            results["notes"] = "none of the forged JWTs were accepted"
+
         return results
 
     # response bodies are raw JSON text, so backslashes come back doubled
@@ -237,6 +361,21 @@ def main():
     fuzzer = DynamicFuzzer(base_url=args.url)
     report = {}
 
+    if args.dir:
+        if os.path.isdir(args.dir):
+            endpoints = fuzzer.discover_nextjs_endpoints(args.dir)
+            report["endpoint_mapping"] = {
+                "discovered": endpoints,
+                "localhost_urls": fuzzer.map_endpoints_to_localhost(endpoints),
+            }
+        else:
+            print(f"[!] directory not found: {args.dir}")
+            report["endpoint_mapping"] = {
+                "discovered": [],
+                "localhost_urls": [],
+                "notes": "directory not found",
+            }
+
     token = fuzzer.login(
         args.email, args.password, endpoint=args.login_endpoint,
         email_field=args.email_field, password_field=args.password_field,
@@ -249,7 +388,7 @@ def main():
     )
 
     if token:
-        own_profile_endpoint = args.profile_endpoint.replace("{id}", "1")
+        own_profile_endpoint = fuzzer._DYNAMIC_ROUTE.sub("1", args.profile_endpoint)
         report["idor"] = fuzzer.test_idor_token_swap(args.profile_endpoint, token, args.other_user_id)
         report["jwt_fuzz"] = fuzzer.fuzz_jwt_auth(own_profile_endpoint, token)
     else:
