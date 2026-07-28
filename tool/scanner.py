@@ -177,6 +177,7 @@ def scan_route_logic(file_path):
             if any(auth_word in content for auth_word in auth_keywords):
                 has_auth = True
 
+            # check if it has ownership validation
             if any(own_word in content for own_word in ownership_keywords):
                 has_owner_check = True
 
@@ -198,7 +199,108 @@ def scan_route_logic(file_path):
 
     return findings
 
+def scan_plaintext_passwords(file_path):
+    """
+    Scans for plaintext password comparisons that use equality
+    and flagging when standard cryptographic libraries are missing.
+    """
+
+    if file_path.endswith(('.json', '.env', '.md')):
+        return []
+
+    findings = []
     
+    password_keywords = ['password', 'passwd', 'pwd']
+    crypto_keywords = ['bcrypt', 'argon2', 'scrypt', 'hash', 'compare']
+    
+    equality_regex = re.compile(r'===|==|!==|!=')
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            for line_number, line in enumerate(file, 1):
+                lower_line = line.lower()
+
+                # check for comparison
+                if equality_regex.search(line):
+                    if any(pwd in lower_line for pwd in password_keywords):
+                        # check for libraries
+                        if not any(crypto in lower_line for crypto in crypto_keywords):
+                            findings.append({
+                                "type": "Unsafe password comparison (Plaintext)",
+                                "line": line_number,
+                                "content": line.strip()[:100]
+                            })
+                            
+    except Exception as e:
+        pass 
+
+    return findings
+
+def scan_insecure_storage(file_path):
+    """
+    Scans frontend logic files for instances where authentication tokens 
+    are being saved to highly accessible web storage (localStorage/sessionStorage).
+    """
+
+    if not file_path.endswith(('.js', '.jsx', '.ts', '.tsx')):
+        return []
+
+    findings = []
+    
+    storage_keywords = ['localstorage.setitem', 'sessionstorage.setitem']
+    auth_keywords = ['token', 'jwt', 'auth', 'session']
+
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            for line_number, line in enumerate(file, 1):
+                lower_line = line.lower()
+                
+                if any(storage in lower_line for storage in storage_keywords):
+                    if any(auth in lower_line for auth in auth_keywords):
+                        findings.append({
+                            "type": "Insecure token storage (XSS Risk)",
+                            "line": line_number,
+                            "content": line.strip()[:100]
+                        })
+                            
+    except Exception as e:
+        pass 
+
+    return findings
+
+def scan_sql_injection(file_path):
+    """
+    Scans for potential SQL Injection vulnerabilities by checking for direct string
+    concatenation within SQL queries.
+    """
+    
+    if not file_path.endswith(('.js', '.ts', '.jsx', '.tsx')):
+        return []
+
+    findings = []
+    
+    sql_keywords = ['select *', 'select ', 'insert into ', 'update ', 'delete from ']
+    
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            for line_number, line in enumerate(file, 1):
+                lower_line = line.lower()
+                
+                # check for literals and direct concatenation
+                if any(sql in lower_line for sql in sql_keywords):
+                    if '${' in line or '+' in line:
+                        if '?' not in line and '$1' not in line:
+                            findings.append({
+                                "type": "Potential SQL Injection (Direct Concatenation)",
+                                "line": line_number,
+                                "content": line.strip()[:100]
+                            })
+                            
+    except Exception as e:
+        pass 
+
+    return findings
+
 def main():
     parser = argparse.ArgumentParser(description="Vibe Fuzzer SAST Module: Static Code Scanner")
     parser.add_argument("--dir", required=True, help="Path to the application directory you want to scan")
@@ -219,12 +321,18 @@ def main():
     total_secrets_found = 0
     total_weak_config_found = 0
     total_route_flaws_found = 0
+    total_plaintext_pwds_found = 0
+    total_storage_flaws_found = 0
+    total_sql_injects_found = 0
     
     # Loop through the files we found and scan them
     for file_path in files:
         secrets_found = scan_for_secrets(file_path)
         weak_config_found = scan_jwt_config(file_path)
         route_flaw_found = scan_route_logic(file_path)
+        plaintext_pwd_found = scan_plaintext_passwords(file_path)
+        storage_flaw_found = scan_insecure_storage(file_path)
+        sql_inject_found = scan_sql_injection(file_path)
 
         
         if secrets_found:
@@ -245,10 +353,31 @@ def main():
                 print(f"    -> Line {flaw['line']} | Type: {flaw['type']}")
                 total_route_flaws_found += 1
 
+        if plaintext_pwd_found:
+            print(f"\n[!] WARNING: Plaintext password logic found in: {file_path}")
+            for pwd in plaintext_pwd_found:
+                print(f"    -> Line {pwd['line']} | Type: {pwd['type']}")
+                total_plaintext_pwds_found += 1
+
+        if storage_flaw_found:
+            print(f"\n[!] WARNING: Insecure client-side storage found in: {file_path}")
+            for flaw in storage_flaw_found:
+                print(f"    -> Line {flaw['line']} | Type: {flaw['type']}")
+                total_storage_flaws_found += 1
+
+        if sql_inject_found:
+            print(f"\n[!] WARNING: Potential SQL Injection found in: {file_path}")
+            for inject in sql_inject_found:
+                print(f"    -> Line {inject['line']} | Type: {inject['type']}")
+                total_sql_injects_found += 1
+
     print(f"""\n[*] Scan complete.
         Total potential secrets found: {total_secrets_found}
         Total weak JWT configurations found: {total_weak_config_found}
         Total authorization flaws found: {total_route_flaws_found}
+        Total plaintext passwords found: {total_plaintext_pwds_found}
+        Total token storage flaws found: {total_storage_flaws_found}
+        Total potential SQL injections found: {total_sql_injects_found}
     """)
     
 
