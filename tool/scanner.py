@@ -101,7 +101,7 @@ def scan_jwt_config(file_path):
     findings = []
 
     try:
-        with open(file_path, 'r', encoding='utf=8') as file:
+        with open(file_path, 'r', encoding='utf-8') as file:
             for line_number, line in enumerate(file, 1):
                 if ignore_exp_regex.search(line):
                     findings.append({
@@ -124,7 +124,7 @@ def scan_jwt_config(file_path):
                         "content": line.strip()[:100]
                     })
 
-                if weak_placeholder_regex(line):
+                if weak_placeholder_regex.search(line):
                     findings.append({
                         "type": "Insecure JWT: predictable secret key is hardcoded",
                         "line": line_number,
@@ -175,6 +175,8 @@ def scan_route_logic(file_path):
     except Exception as e:
         pass
 
+    return findings
+
     
 def main():
     parser = argparse.ArgumentParser(description="Vibe Fuzzer SAST Module: Static Code Scanner")
@@ -209,8 +211,8 @@ def main():
 
         if weak_config_found:
             print(f"\n[!] WARNING: Potentially weak JWT configurations found in: {file_path}")
-            for config in weak_config_found:
-                print(f"    -> Line {config['line']} | Type: {config['type']}")
+            for weak_config in weak_config_found:
+                print(f"    -> Line {weak_config['line']} | Type: {weak_config['type']}")
                 total_weak_config_found += 1
 
     print(f"""[*] Scan complete.
