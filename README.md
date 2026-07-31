@@ -14,13 +14,33 @@ The core purpose of this tool is to provide developers and security teams with a
 * **Rate-Limiting & Verbose Error Fuzzer:** Stress-tests local entry forms with concurrent asynchronous payloads to catch missing request throttling and captures 500 Internal Server Errors for leaked server file paths or stack traces.
 
 ## System Requirements
-* insert once final
+* Python 3.8+
+* `requests`, `PyJWT` (dynamic fuzzing) and `rich` (pretty terminal report) — see `requirements.txt`. The static scan runs on the standard library alone; the dynamic phase and pretty output degrade gracefully if their optional deps are missing.
 
 ## Installation
-1. insert once final
+1. Clone the repository.
+2. (Optional but recommended) create a virtual environment.
+3. Install dependencies: `pip install -r requirements.txt`
 
 ## Usage
-1. insert once final
+The whole suite runs from a single entry point, `main.py`.
+
+```bash
+# Static scan only (default) — point it at a project directory
+python main.py --dir ./my-vibecoded-app
+
+# Write the final risk report to a file (txt or json)
+python main.py --dir ./my-vibecoded-app --format json --output report.json
+
+# Also run the live dynamic fuzzer against a locally running instance
+python main.py --dir ./my-vibecoded-app --dynamic --url http://localhost:3000
+```
+
+Run `python main.py --help` for the full list of options (login credentials,
+endpoint overrides, request count, etc.). The tool prints a color-coded
+vulnerability risk report to the terminal and, with `--output`, writes the same
+report to disk as human-readable TXT or machine-readable JSON. Its exit code is
+`1` when any HIGH/CRITICAL finding is present, so it drops straight into CI.
 
 ## Testing Environment
 * **Controlled Lab Setup:** This tool is strictly tested within a local, simulated infrastructure environment.
