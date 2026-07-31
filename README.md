@@ -1,4 +1,4 @@
-# [Insert Tool Name Here]
+# VibeCheck
 
 ## Description
 This tool is a hybrid security scanning and fuzzing suite specifically engineered to audit "vibe-coded" applications like websites and APIs that are rapidly generated using Large Language Models (LLMs) like ChatGPT or Claude. While AI-assisted development produces functional code with zero syntax errors, it notoriously introduces massive architectural blind spots because AI optimizes for immediate functionality rather than defensive security engineering.
