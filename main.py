@@ -22,6 +22,7 @@ Example:
 """
 
 import argparse
+import html
 import json
 import os
 import re
@@ -57,26 +58,6 @@ except ImportError:
 DEFAULT_TIMEOUT = 5
 DEFAULT_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "tool", "scanner_config.json")
 
-SEVERITY_MAP = {
-    "Exposed API Token (sk- format)": "CRITICAL",
-    "Predictable Variable Name": "HIGH",
-    "Insecure JWT: ignoreExpiration = true": "HIGH",
-    "Insecure JWT: ignoreNotBefore = true": "MEDIUM",
-    "Insecure JWT: 'none' algorithm accepted": "CRITICAL",
-    "Insecure JWT: predictable secret key is hardcoded": "CRITICAL",
-    "Insecure JWT: Token created without expiresIn flag": "MEDIUM",
-    "Missing Route Authentication for Sensitive Endpoints": "HIGH",
-    "Broken Object-Level (IDOR) Risk": "HIGH",
-    "Unsafe password comparison (Plaintext)": "HIGH",
-    "Insecure token storage (XSS Risk)": "MEDIUM",
-    "Potential SQL Injection (Direct Concatenation)": "CRITICAL",
-    "Missing Rate Limiting": "MEDIUM",
-    "IDOR Confirmed (Live)": "CRITICAL",
-    "JWT Authentication Bypass (Live)": "CRITICAL",
-    "Verbose Error / Info Leak": "MEDIUM",
-}
-
-SEVERITY_WEIGHT = {"CRITICAL": 10, "HIGH": 5, "MEDIUM": 2, "LOW": 1}
 SEVERITY_ORDER = ["CRITICAL", "HIGH", "MEDIUM", "LOW"]
 SEVERITY_COLOR = {
     "CRITICAL": "bold red",
@@ -85,18 +66,105 @@ SEVERITY_COLOR = {
     "LOW": "cyan",
 }
 
+# CVSS v3.1 Base metric vector per finding type (the part after "CVSS:3.1/").
+# The numeric score and severity band are computed from these with the official
+# formula (cvss31_base_score), so the ratings follow the standard rather than
+# being hand-assigned. Reference: FIRST CVSS v3.1 specification.
+CVSS_VECTORS = {
+    # --- static / SAST ---
+    "Exposed API Token (sk- format)": "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+    "Predictable Variable Name": "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+    "Insecure JWT: ignoreExpiration = true": "AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N",
+    "Insecure JWT: ignoreNotBefore = true": "AV:N/AC:H/PR:N/UI:N/S:U/C:L/I:N/A:N",
+    "Insecure JWT: 'none' algorithm accepted": "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+    "Insecure JWT: predictable secret key is hardcoded": "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+    "Insecure JWT: Token created without expiresIn flag": "AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N",
+    "Missing Route Authentication for Sensitive Endpoints": "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N",
+    "Broken Object-Level (IDOR) Risk": "AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N",
+    "Unsafe password comparison (Plaintext)": "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N",
+    "Insecure token storage (XSS Risk)": "AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N",
+    "Potential SQL Injection (Direct Concatenation)": "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H",
+    # --- dynamic / DAST ---
+    "Missing Rate Limiting": "AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:L",
+    "IDOR Confirmed (Live)": "AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:H/A:N",
+    "JWT Authentication Bypass (Live)": "AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N",
+    "Verbose Error / Info Leak": "AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:N/A:N",
+}
+DEFAULT_VECTOR = "AV:N/AC:L/PR:L/UI:N/S:U/C:L/I:N/A:N"
 
-def severity_of(finding_type: str) -> str:
-    return SEVERITY_MAP.get(finding_type, "MEDIUM")
+# CVSS v3.1 metric weights (FIRST specification, section 7.4).
+_AV = {"N": 0.85, "A": 0.62, "L": 0.55, "P": 0.20}
+_AC = {"L": 0.77, "H": 0.44}
+_UI = {"N": 0.85, "R": 0.62}
+_PR_U = {"N": 0.85, "L": 0.62, "H": 0.27}   # scope unchanged
+_PR_C = {"N": 0.85, "L": 0.68, "H": 0.50}   # scope changed
+_CIA = {"H": 0.56, "L": 0.22, "N": 0.00}
+
+
+def _cvss_roundup(value):
+    """Official CVSS v3.1 roundup: round up to the nearest 0.1."""
+    int_input = round(value * 100000)
+    if int_input % 10000 == 0:
+        return int_input / 100000.0
+    import math
+    return (math.floor(int_input / 10000) + 1) / 10.0
+
+
+def cvss31_base_score(vector):
+    """Compute the CVSS v3.1 Base score (0.0-10.0) from a metric vector string."""
+    metrics = dict(p.split(":") for p in vector.split("/") if ":" in p and p.split(":")[0] != "CVSS")
+    scope_changed = metrics["S"] == "C"
+
+    av = _AV[metrics["AV"]]
+    ac = _AC[metrics["AC"]]
+    ui = _UI[metrics["UI"]]
+    pr = (_PR_C if scope_changed else _PR_U)[metrics["PR"]]
+    c, i, a = _CIA[metrics["C"]], _CIA[metrics["I"]], _CIA[metrics["A"]]
+
+    iss = 1 - (1 - c) * (1 - i) * (1 - a)
+    if scope_changed:
+        impact = 7.52 * (iss - 0.029) - 3.25 * (iss - 0.02) ** 15
+    else:
+        impact = 6.42 * iss
+
+    if impact <= 0:
+        return 0.0
+
+    exploitability = 8.22 * av * ac * pr * ui
+    raw = 1.08 * (impact + exploitability) if scope_changed else (impact + exploitability)
+    return _cvss_roundup(min(raw, 10.0))
+
+
+def cvss31_severity(score):
+    """Map a CVSS v3.1 Base score to its qualitative severity band."""
+    if score == 0.0:
+        return "MINIMAL"
+    if score < 4.0:
+        return "LOW"
+    if score < 7.0:
+        return "MEDIUM"
+    if score < 9.0:
+        return "HIGH"
+    return "CRITICAL"
+
+
+def cvss_for(finding_type):
+    """Return (severity_band, base_score, full_vector_string) for a finding type."""
+    vector = CVSS_VECTORS.get(finding_type, DEFAULT_VECTOR)
+    score = cvss31_base_score(vector)
+    return cvss31_severity(score), score, f"CVSS:3.1/{vector}"
 
 
 def make_finding(scanner, category, ftype, detail, file=None, line=None):
     """Normalize every detector's output into one common finding shape."""
+    severity, score, vector = cvss_for(ftype)
     return {
         "scanner": scanner,
         "category": category,
         "type": ftype,
-        "severity": severity_of(ftype),
+        "severity": severity,
+        "cvss_score": score,
+        "cvss_vector": vector,
         "file": file,
         "line": line,
         "detail": detail,
@@ -664,7 +732,8 @@ def build_report(findings, target_dir, url=None, ran_dynamic=False):
     for f in findings:
         counts[f["severity"]] = counts.get(f["severity"], 0) + 1
 
-    score = sum(SEVERITY_WEIGHT.get(f["severity"], 0) for f in findings)
+    # Overall exposure = the worst single CVSS base score present (standard practice).
+    highest_cvss = max((f["cvss_score"] for f in findings), default=0.0)
 
     if counts["CRITICAL"]:
         level = "CRITICAL"
@@ -677,21 +746,23 @@ def build_report(findings, target_dir, url=None, ran_dynamic=False):
     else:
         level = "MINIMAL"
 
+    # sort by CVSS score (worst first), then for stable grouping
     ordered = sorted(
         findings,
-        key=lambda f: (SEVERITY_ORDER.index(f["severity"]), f["scanner"], f["file"] or "", f["line"] or 0),
+        key=lambda f: (-f["cvss_score"], f["scanner"], f["file"] or "", f["line"] or 0),
     )
 
     return {
         "tool": "Vibe-Coded Website Fuzzer",
         "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "scoring_standard": "CVSS v3.1",
         "target_directory": target_dir,
         "target_url": url if ran_dynamic else None,
         "scans_run": ["static"] + (["dynamic"] if ran_dynamic else []),
         "summary": {
             "total_findings": len(findings),
             "risk_level": level,
-            "risk_score": score,
+            "highest_cvss": highest_cvss,
             "by_severity": counts,
         },
         "findings": ordered,
@@ -711,7 +782,9 @@ def render_report_text(report):
         lines.append(f"Target URL: {report['target_url']}")
     lines.append(f"Scans run : {', '.join(report['scans_run'])}")
     lines.append("")
-    lines.append(f"OVERALL RISK LEVEL : {s['risk_level']}   (risk score: {s['risk_score']})")
+    lines.append(f"Scoring   : {report.get('scoring_standard', 'CVSS v3.1')}")
+    lines.append("")
+    lines.append(f"OVERALL RISK LEVEL : {s['risk_level']}   (highest CVSS: {s['highest_cvss']})")
     lines.append(f"TOTAL FINDINGS     : {s['total_findings']}")
     lines.append("  " + "  ".join(f"{sev}: {s['by_severity'][sev]}" for sev in SEVERITY_ORDER))
     lines.append("")
@@ -725,8 +798,9 @@ def render_report_text(report):
         loc = f["file"] or "-"
         if f["line"]:
             loc = f"{loc}:{f['line']}"
-        lines.append(f"[{i}] {f['severity']:<8} {f['type']}")
+        lines.append(f"[{i}] CVSS {f['cvss_score']:<4} {f['severity']:<8} {f['type']}")
         lines.append(f"      scanner : {f['scanner']}  |  category: {f['category']}")
+        lines.append(f"      vector  : {f['cvss_vector']}")
         lines.append(f"      location: {loc}")
         lines.append(f"      detail  : {f['detail']}")
         lines.append("")
@@ -750,8 +824,9 @@ def print_report_terminal(report):
     if report["target_url"]:
         header += f"\n[bold]Target URL:[/bold] {report['target_url']}"
     header += (
+        f"\n[bold]Scoring:[/bold] {report.get('scoring_standard', 'CVSS v3.1')}"
         f"\n\n[bold]Overall risk:[/bold] [{level_color}]{level}[/{level_color}]"
-        f"   [dim](score {s['risk_score']})[/dim]\n"
+        f"   [dim](highest CVSS {s['highest_cvss']})[/dim]\n"
         f"[bold]Total findings:[/bold] {s['total_findings']}   "
         + "  ".join(
             f"[{SEVERITY_COLOR.get(sev, 'white')}]{sev} {s['by_severity'][sev]}[/{SEVERITY_COLOR.get(sev, 'white')}]"
@@ -766,6 +841,7 @@ def print_report_terminal(report):
 
     table = Table(box=box.SIMPLE_HEAVY, show_lines=False, header_style="bold")
     table.add_column("#", justify="right", style="dim", no_wrap=True)
+    table.add_column("CVSS", justify="right", no_wrap=True)
     table.add_column("Severity", no_wrap=True)
     table.add_column("Type")
     table.add_column("Location")
@@ -778,6 +854,7 @@ def print_report_terminal(report):
         color = SEVERITY_COLOR.get(f["severity"], "white")
         table.add_row(
             str(i),
+            f"[{color}]{f['cvss_score']}[/{color}]",
             f"[{color}]{f['severity']}[/{color}]",
             f["type"],
             loc,
@@ -786,11 +863,140 @@ def print_report_terminal(report):
     _console.print(table)
 
 
+SEVERITY_HEX = {
+    "CRITICAL": "#dc2626",
+    "HIGH": "#ea580c",
+    "MEDIUM": "#d97706",
+    "LOW": "#0891b2",
+    "MINIMAL": "#16a34a",
+}
+
+
+def render_report_html(report):
+    """Self-contained, styled HTML version of the report (opens in any browser)."""
+    s = report["summary"]
+    level = s["risk_level"]
+    accent = SEVERITY_HEX.get(level, "#16a34a")
+
+    def esc(value):
+        return html.escape(str(value), quote=True)
+
+    stat_cards = "".join(
+        f'''<div class="card" style="--c:{SEVERITY_HEX.get(sev, '#64748b')}">
+              <div class="num">{s["by_severity"][sev]}</div>
+              <div class="lbl">{sev}</div>
+            </div>'''
+        for sev in SEVERITY_ORDER
+    )
+
+    if report["findings"]:
+        rows = "".join(
+            f'''<tr>
+                  <td class="idx">{i}</td>
+                  <td><span class="score" style="--c:{SEVERITY_HEX.get(f['severity'], '#64748b')}">{f['cvss_score']}</span></td>
+                  <td><span class="pill" style="--c:{SEVERITY_HEX.get(f['severity'], '#64748b')}">{esc(f['severity'])}</span></td>
+                  <td class="type">{esc(f['type'])}<div class="vec">{esc(f['cvss_vector'])}</div></td>
+                  <td><span class="tag">{esc(f['scanner'])}</span> {esc(f['category'])}</td>
+                  <td class="loc">{esc((f['file'] or '-') + (f':' + str(f['line']) if f['line'] else ''))}</td>
+                  <td><code>{esc(f['detail'])}</code></td>
+                </tr>'''
+            for i, f in enumerate(report["findings"], 1)
+        )
+        findings_block = f'''<table>
+            <thead><tr><th>#</th><th>CVSS</th><th>Severity</th><th>Type / Vector</th><th>Source</th><th>Location</th><th>Detail</th></tr></thead>
+            <tbody>{rows}</tbody>
+          </table>'''
+    else:
+        findings_block = '<p class="clean">✓ No vulnerabilities detected.</p>'
+
+    url_row = (
+        f'<div><span>Target URL</span><strong>{esc(report["target_url"])}</strong></div>'
+        if report["target_url"] else ""
+    )
+
+    return f'''<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vulnerability Risk Report</title>
+<style>
+  :root {{ color-scheme: light dark; }}
+  * {{ box-sizing: border-box; }}
+  body {{ margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+          background:#0b1120; color:#e2e8f0; line-height:1.5; }}
+  .wrap {{ max-width: 1100px; margin: 0 auto; padding: 32px 20px 64px; }}
+  .banner {{ border-radius:16px; padding:28px 32px; background:linear-gradient(135deg,{accent},#0f172a);
+             box-shadow:0 10px 30px rgba(0,0,0,.4); }}
+  .banner h1 {{ margin:0 0 4px; font-size:1.5rem; letter-spacing:.3px; }}
+  .banner .sub {{ opacity:.85; font-size:.9rem; }}
+  .level {{ display:inline-block; margin-top:16px; padding:8px 18px; border-radius:999px;
+            background:rgba(0,0,0,.35); font-weight:700; font-size:1.1rem; }}
+  .level small {{ opacity:.75; font-weight:400; }}
+  .meta {{ display:flex; flex-wrap:wrap; gap:24px; margin:22px 4px; font-size:.85rem; }}
+  .meta div span {{ display:block; opacity:.55; text-transform:uppercase; letter-spacing:.5px; font-size:.7rem; }}
+  .cards {{ display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:14px; margin:24px 0; }}
+  .card {{ background:#111827; border:1px solid #1f2937; border-left:4px solid var(--c);
+           border-radius:12px; padding:16px 18px; }}
+  .card .num {{ font-size:2rem; font-weight:800; color:var(--c); }}
+  .card .lbl {{ font-size:.72rem; letter-spacing:.6px; opacity:.7; }}
+  table {{ width:100%; border-collapse:collapse; margin-top:12px; font-size:.86rem;
+           background:#0f172a; border-radius:12px; overflow:hidden; }}
+  th {{ text-align:left; padding:12px 14px; background:#1e293b; font-size:.72rem;
+        text-transform:uppercase; letter-spacing:.6px; opacity:.85; }}
+  td {{ padding:12px 14px; border-top:1px solid #1e293b; vertical-align:top; }}
+  td.idx {{ opacity:.5; }}
+  td.type {{ font-weight:600; }}
+  td.loc {{ font-family:ui-monospace, Menlo, Consolas, monospace; font-size:.78rem; opacity:.8;
+            word-break:break-all; }}
+  .score {{ font-weight:800; font-size:1rem; color:var(--c); }}
+  .vec {{ font-family:ui-monospace, Menlo, Consolas, monospace; font-size:.68rem; opacity:.55;
+          font-weight:400; margin-top:4px; word-break:break-all; }}
+  code {{ font-family:ui-monospace, Menlo, Consolas, monospace; font-size:.78rem;
+          background:#020617; padding:2px 6px; border-radius:6px; display:inline-block; max-width:420px;
+          overflow-x:auto; white-space:pre; }}
+  .pill {{ padding:3px 10px; border-radius:999px; font-size:.7rem; font-weight:700; color:#fff;
+           background:var(--c); }}
+  .tag {{ font-size:.65rem; text-transform:uppercase; letter-spacing:.5px; padding:2px 6px;
+          border:1px solid #334155; border-radius:6px; opacity:.8; }}
+  .clean {{ color:#4ade80; font-size:1.1rem; padding:24px; }}
+  footer {{ margin-top:32px; font-size:.72rem; opacity:.45; text-align:center; }}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="banner">
+    <h1>🛡️ {esc(report["tool"])}</h1>
+    <div class="sub">Vulnerability Risk Report</div>
+    <div class="level" style="color:#fff">{esc(level)} <small>· highest CVSS {s["highest_cvss"]}</small></div>
+  </div>
+
+  <div class="meta">
+    <div><span>Generated</span><strong>{esc(report["generated_at"])}</strong></div>
+    <div><span>Scoring</span><strong>{esc(report.get("scoring_standard", "CVSS v3.1"))}</strong></div>
+    <div><span>Directory</span><strong>{esc(report["target_directory"])}</strong></div>
+    <div><span>Scans run</span><strong>{esc(", ".join(report["scans_run"]))}</strong></div>
+    {url_row}
+    <div><span>Total findings</span><strong>{s["total_findings"]}</strong></div>
+  </div>
+
+  <div class="cards">{stat_cards}</div>
+
+  {findings_block}
+
+  <footer>Generated by {esc(report["tool"])} · for authorized, educational testing only.</footer>
+</div>
+</body>
+</html>'''
+
+
 def write_report_file(report, output_path, fmt):
-    """Persist the report to disk as json or txt."""
+    """Persist the report to disk as json, html or txt."""
     with open(output_path, "w", encoding="utf-8") as fh:
         if fmt == "json":
             json.dump(report, fh, indent=2)
+        elif fmt == "html":
+            fh.write(render_report_html(report))
         else:
             fh.write(render_report_text(report))
 
@@ -806,7 +1012,7 @@ def build_parser():
                         help="Path to the application directory to scan (e.g. ./my-vibecoded-app)")
 
     out = parser.add_argument_group("report output")
-    out.add_argument("--format", choices=["txt", "json"], default="txt",
+    out.add_argument("--format", choices=["txt", "json", "html"], default="txt",
                      help="Format for the report written with --output")
     out.add_argument("--output", "-o", metavar="FILE",
                      help="Write the final report to this file (in addition to the terminal)")

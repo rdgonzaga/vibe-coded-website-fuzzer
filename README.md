@@ -29,8 +29,9 @@ The whole suite runs from a single entry point, `main.py`.
 # Static scan only (default) — point it at a project directory
 python main.py --dir ./my-vibecoded-app
 
-# Write the final risk report to a file (txt or json)
+# Write the final risk report to a file (txt, json, or a styled html page)
 python main.py --dir ./my-vibecoded-app --format json --output report.json
+python main.py --dir ./my-vibecoded-app --format html --output report.html
 
 # Also run the live dynamic fuzzer against a locally running instance
 python main.py --dir ./my-vibecoded-app --dynamic --url http://localhost:3000
@@ -39,12 +40,20 @@ python main.py --dir ./my-vibecoded-app --dynamic --url http://localhost:3000
 Run `python main.py --help` for the full list of options (login credentials,
 endpoint overrides, request count, etc.). The tool prints a color-coded
 vulnerability risk report to the terminal and, with `--output`, writes the same
-report to disk as human-readable TXT or machine-readable JSON. Its exit code is
-`1` when any HIGH/CRITICAL finding is present, so it drops straight into CI.
+report to disk as human-readable TXT, machine-readable JSON, or a self-contained,
+styled HTML page (open `report.html` in any browser — no internet needed). Its
+exit code is `1` when any HIGH/CRITICAL finding is present, so it drops straight
+into CI.
+
+Every finding is scored with the **CVSS v3.1** Base metric formula (implemented
+per the FIRST specification), so each report shows a numeric 0.0–10.0 score, the
+official severity band (None/Low/Medium/High/Critical), and the full vector
+string (e.g. `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`). The overall risk
+level is driven by the highest CVSS score present.
 
 ## Testing Environment
 * **Controlled Lab Setup:** This tool is strictly tested within a local, simulated infrastructure environment.
-* **Target Application:** A functional, intentionally vulnerable e-commerce backend locally hosted on loopback addresses (localhost / 127.0.0.1).
+* **Target Applications:** Three intentionally-vulnerable sample apps ship with the repo for testing — `vulnerable-target` (e-commerce), `vulnerable-targets2` (fintech/payments), and `vulnerable-targets3` (admin dashboard) — each seeded with a different mix of flaws and hosted on loopback addresses (localhost / 127.0.0.1).
 * **Isolation:** The application boundaries are isolated completely from public web servers, external cloud services, or production institutional systems.
 
 ## Sample Output
