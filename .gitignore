@@ -70,3 +70,6 @@ env/
 *.db
 *.sqlite
 *.sqlite3
+
+CLAUDE.md
+docs/dast-task-plan.md

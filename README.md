@@ -30,6 +30,7 @@ The whole suite runs from a single entry point, `main.py`.
 python main.py --dir ./my-vibecoded-app
 
 # Write the final risk report to a file (txt, json, or a styled html page)
+python main.py --dir ./my-vibecoded-app --format txt --output report.txt
 python main.py --dir ./my-vibecoded-app --format json --output report.json
 python main.py --dir ./my-vibecoded-app --format html --output report.html
 
@@ -50,6 +51,26 @@ per the FIRST specification), so each report shows a numeric 0.0–10.0 score, t
 official severity band (None/Low/Medium/High/Critical), and the full vector
 string (e.g. `CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H`). The overall risk
 level is driven by the highest CVSS score present.
+
+## Project Structure
+```
+vibe-coded-website-fuzzer/
+├── main.py                  # Unified entry point — orchestration, CVSS engine, and report renderer
+├── requirements.txt
+├── tool/
+│   ├── __init__.py          # Makes tool/ a Python package
+│   ├── scanner.py           # Static Analysis Security Testing (SAST) — all 7 detection functions
+│   ├── fuzzer.py            # Dynamic Application Security Testing (DAST) — DynamicFuzzer class
+│   └── scanner_config.json  # Target file extensions and ignored directories
+└── vulnerable-target/       # Sample intentionally-vulnerable Next.js app for testing
+```
+
+`main.py` imports detection logic directly from `tool/scanner.py` and `tool/fuzzer.py`.
+Each module can also be run standalone for quick individual scans:
+```bash
+python tool/scanner.py --dir ./my-app      # SAST only
+python tool/fuzzer.py  --url http://localhost:3000  # DAST only
+```
 
 ## Testing Environment
 * **Controlled Lab Setup:** This tool is strictly tested within a local, simulated infrastructure environment.
@@ -147,7 +168,7 @@ level is driven by the highest CVSS score present.
 ```
 
 ## Limitations
-* **Framework Heuristics:** The static scanner relies on AST/regex pattern matching tailored primarily for JavaScript/Node.js (Next.js, Express) and Python (Flask, FastAPI). Non-standard routing architectures or heavily obfuscated source code may lead to false positives or missed findings.
+* **Framework Heuristics:** The static scanner relies on regex pattern matching tailored primarily for JavaScript/Node.js (Next.js, Express) and Python (Flask, FastAPI). Non-standard routing architectures or heavily obfuscated source code may lead to false positives or missed findings.
 * **REST/HTTP Scope:** Dynamic fuzzing targets standard HTTP REST API endpoints, JSON authentication, JWT signatures, and numeric ID parameters. It does not perform full client-side browser rendering, DOM-based XSS execution (e.g., via Playwright/Puppeteer), or binary memory corruption testing.
 * **Sandbox Requirement:** Dynamic tests require the target application to be actively running on `localhost` or a designated test server.
 
@@ -172,5 +193,5 @@ This tool was developed for educational purposes only. It must only be used in a
 ## Original Contribution
 * **Tailored for AI ("Vibe-Coded") Vulnerability Patterns:** Specifically engineered to detect architectural blind spots common in LLM-assisted codebases (e.g., fallback secrets like `"supersecret"`, missing route authorization wrappers, unvalidated sequential numeric IDs).
 * **Native Standard-Compliant CVSS v3.1 Engine:** Built-in formula implementation adhering to the FIRST CVSS v3.1 specification without relying on external scoring packages.
-* **Unified SAST + DAST Pipeline:** Bridges static code analysis (extracting routes & auth patterns) directly with live HTTP dynamic fuzzing.
+* **Unified SAST + DAST Pipeline with Modular Architecture:** `main.py` bridges static code analysis (extracting routes & auth patterns) directly with live HTTP dynamic fuzzing. Detection logic is cleanly separated into `tool/scanner.py` (SAST) and `tool/fuzzer.py` (DAST), which `main.py` imports and orchestrates — each module can also be run standalone for independent testing.
 * **Zero-Dependency Core & Graceful Degradation:** The static scanner operates using Python's standard library alone, while optional dependencies (`rich`, `requests`, `PyJWT`) seamlessly unlock styled terminal output, live HTTP fuzzing, and interactive HTML reports.

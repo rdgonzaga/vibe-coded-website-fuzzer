@@ -3,10 +3,15 @@ import argparse
 import json
 import re
 
-def load_config(config_path="tool/scanner_config.json"):
+# Resolved relative to this file so it works regardless of the calling CWD.
+_DEFAULT_CONFIG = os.path.join(os.path.dirname(os.path.abspath(__file__)), "scanner_config.json")
+
+def load_config(config_path=None):
     """
     Reads the JSON configuration file for targets and ignores.
     """
+    if config_path is None:
+        config_path = _DEFAULT_CONFIG
 
     try:
         with open(config_path, 'r') as file:
@@ -14,9 +19,9 @@ def load_config(config_path="tool/scanner_config.json"):
     except FileNotFoundError:
         print(f"[!] Warning: Config file not found at {config_path}. Using defaults.")
 
-        # Fallback 
+        # Fallback
         return {
-            "target_extensions": [".js", ".ts", ".tsx", ".env"],
+            "target_extensions": [".js", ".ts", ".tsx", ".jsx", ".env", ".env.local"],
             "ignore_dirs": ["node_modules", ".git", ".next", "dist", "build"]
         }
 
@@ -183,7 +188,7 @@ def scan_route_logic(file_path):
 
         if not has_auth:
             findings.append({
-                "type": "Missing Route Authentication for Senstive Endpoints",
+                "type": "Missing Route Authentication for Sensitive Endpoints",
                 "line": 1,
                 "content": f"File '{os.path.basename(file_path)}' lacks recognized auth checks."
             })
@@ -301,6 +306,39 @@ def scan_sql_injection(file_path):
 
     return findings
 
+def scan_stub_code(file_path):
+    """
+    Flags placeholder / stub code (TODO/FIXME, fake auth, not-implemented)
+    left in JavaScript/TypeScript source files.
+    """
+    if not file_path.endswith(('.js', '.jsx', '.ts', '.tsx')):
+        return []
+
+    stub_regex = re.compile(
+        r"(?i)(//\s*(todo|fixme|hack|xxx)\b"
+        r"|/\*\s*(todo|fixme|hack|xxx)\b"
+        r"|\bnot[\s_]?implemented\b"
+        r"|throw\s+new\s+Error\(\s*['\"]((todo|not implemented|unimplemented))"
+        r"|return\s+true\s*;?\s*//\s*(todo|temp|placeholder|for now|skip auth)"
+        r"|\bplaceholder\b|\bdummy(data|user|token|value)?\b)"
+    )
+
+    findings = []
+    try:
+        with open(file_path, 'r', encoding='utf-8') as file:
+            for line_number, line in enumerate(file, 1):
+                if stub_regex.search(line):
+                    findings.append({
+                        "type": "Placeholder / stub code left in source",
+                        "line": line_number,
+                        "content": line.strip()[:100]
+                    })
+    except Exception:
+        pass
+
+    return findings
+
+
 def main():
     parser = argparse.ArgumentParser(description="Vibe Fuzzer SAST Module: Static Code Scanner")
     parser.add_argument("--dir", required=True, help="Path to the application directory you want to scan")
@@ -333,6 +371,7 @@ def main():
         plaintext_pwd_found = scan_plaintext_passwords(file_path)
         storage_flaw_found = scan_insecure_storage(file_path)
         sql_inject_found = scan_sql_injection(file_path)
+        stub_found = scan_stub_code(file_path)
 
         
         if secrets_found:
@@ -370,6 +409,11 @@ def main():
             for inject in sql_inject_found:
                 print(f"    -> Line {inject['line']} | Type: {inject['type']}")
                 total_sql_injects_found += 1
+
+        if stub_found:
+            print(f"\n[!] WARNING: Placeholder / stub code found in: {file_path}")
+            for stub in stub_found:
+                print(f"    -> Line {stub['line']} | Type: {stub['type']}")
 
     print(f"""\n[*] Scan complete.
         Total potential secrets found: {total_secrets_found}
