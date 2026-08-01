@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Vulnerability Risk Report</title>
+<style>
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+          background:#0b1120; color:#e2e8f0; line-height:1.5; }
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 20px 64px; }
+  .banner { border-radius:16px; padding:28px 32px; background:linear-gradient(135deg,#dc2626,#0f172a);
+             box-shadow:0 10px 30px rgba(0,0,0,.4); }
+  .banner h1 { margin:0 0 4px; font-size:1.5rem; letter-spacing:.3px; }
+  .banner .sub { opacity:.85; font-size:.9rem; }
+  .level { display:inline-block; margin-top:16px; padding:8px 18px; border-radius:999px;
+            background:rgba(0,0,0,.35); font-weight:700; font-size:1.1rem; }
+  .level small { opacity:.75; font-weight:400; }
+  .meta { display:flex; flex-wrap:wrap; gap:24px; margin:22px 4px; font-size:.85rem; }
+  .meta div span { display:block; opacity:.55; text-transform:uppercase; letter-spacing:.5px; font-size:.7rem; }
+  .cards { display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:14px; margin:24px 0; }
+  .card { background:#111827; border:1px solid #1f2937; border-left:4px solid var(--c);
+           border-radius:12px; padding:16px 18px; }
+  .card .num { font-size:2rem; font-weight:800; color:var(--c); }
+  .card .lbl { font-size:.72rem; letter-spacing:.6px; opacity:.7; }
+  table { width:100%; border-collapse:collapse; margin-top:12px; font-size:.86rem;
+           background:#0f172a; border-radius:12px; overflow:hidden; }
+  th { text-align:left; padding:12px 14px; background:#1e293b; font-size:.72rem;
+        text-transform:uppercase; letter-spacing:.6px; opacity:.85; }
+  td { padding:12px 14px; border-top:1px solid #1e293b; vertical-align:top; }
+  td.idx { opacity:.5; }
+  td.type { font-weight:600; }
+  td.loc { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:.78rem; opacity:.8;
+            word-break:break-all; }
+  .score { font-weight:800; font-size:1rem; color:var(--c); }
+  .vec { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:.68rem; opacity:.55;
+          font-weight:400; margin-top:4px; word-break:break-all; }
+  code { font-family:ui-monospace, Menlo, Consolas, monospace; font-size:.78rem;
+          background:#020617; padding:2px 6px; border-radius:6px; display:inline-block; max-width:420px;
+          overflow-x:auto; white-space:pre; }
+  .pill { padding:3px 10px; border-radius:999px; font-size:.7rem; font-weight:700; color:#fff;
+           background:var(--c); }
+  .tag { font-size:.65rem; text-transform:uppercase; letter-spacing:.5px; padding:2px 6px;
+          border:1px solid #334155; border-radius:6px; opacity:.8; }
+  .clean { color:#4ade80; font-size:1.1rem; padding:24px; }
+  .sect { font-size:1rem; text-transform:uppercase; letter-spacing:.8px; opacity:.75;
+           margin:28px 4px 4px; border-bottom:1px solid #1e293b; padding-bottom:8px; }
+  .assess { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:16px; margin:24px 0; }
+  .assess-col { background:#0f172a; border:1px solid #1e293b; border-radius:12px; padding:16px 18px; }
+  .assess-col h3 { margin:0 0 10px; font-size:.85rem; text-transform:uppercase; letter-spacing:.6px; }
+  .assess-col h3.ok { color:#4ade80; }
+  .assess-col h3.bad { color:#f87171; }
+  .assess-col h3.neutral { color:#38bdf8; }
+  .assess-col ul { list-style:none; margin:0; padding:0; }
+  .assess-col li { font-size:.82rem; padding:5px 0; display:flex; gap:8px; align-items:flex-start; }
+  .assess-col li .g { font-weight:800; }
+  .assess-col li.s .g { color:#4ade80; }
+  .assess-col li.w .g { color:#f87171; }
+  .assess-col li.f .g { color:#38bdf8; }
+  .assess-col li.empty { opacity:.5; font-style:italic; }
+  footer { margin-top:32px; font-size:.72rem; opacity:.45; text-align:center; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="banner">
+    <h1>🛡️ Vibe-Coded Website Fuzzer</h1>
+    <div class="sub">Vulnerability Risk Report</div>
+    <div class="level" style="color:#fff">CRITICAL <small>· highest CVSS 9.8</small></div>
+  </div>
+
+  <div class="meta">
+    <div><span>Generated</span><strong>2026-08-01T09:43:47</strong></div>
+    <div><span>Scoring</span><strong>CVSS v3.1</strong></div>
+    <div><span>Directory</span><strong>./vulnerable-targets2</strong></div>
+    <div><span>Scans run</span><strong>static</strong></div>
+    
+    <div><span>Total findings</span><strong>16</strong></div>
+  </div>
+
+  <div class="cards"><div class="card" style="--c:#dc2626">
+              <div class="num">6</div>
+              <div class="lbl">CRITICAL</div>
+            </div><div class="card" style="--c:#ea580c">
+              <div class="num">6</div>
+              <div class="lbl">HIGH</div>
+            </div><div class="card" style="--c:#d97706">
+              <div class="num">4</div>
+              <div class="lbl">MEDIUM</div>
+            </div><div class="card" style="--c:#0891b2">
+              <div class="num">0</div>
+              <div class="lbl">LOW</div>
+            </div></div>
+
+  <h2 class="sect">Security Assessment</h2>
+  <div class="assess">
+        <div class="assess-col">
+          <h3 class="ok">Strengths</h3>
+          <ul><li class="s empty">None noted.</li></ul>
+        </div>
+        <div class="assess-col">
+          <h3 class="bad">Weaknesses</h3>
+          <ul><li class="w"><span class="g">!</span>SQL injection via string concatenation: 3 finding(s), worst CVSS 9.8 (CRITICAL).</li><li class="w"><span class="g">!</span>Hardcoded secrets &amp; exposed API tokens: 4 finding(s), worst CVSS 9.1 (CRITICAL).</li><li class="w"><span class="g">!</span>Weak JWT configuration: 4 finding(s), worst CVSS 9.1 (CRITICAL).</li><li class="w"><span class="g">!</span>Missing route authentication / IDOR (static): 3 finding(s), worst CVSS 8.2 (HIGH).</li><li class="w"><span class="g">!</span>Plaintext password handling: 1 finding(s), worst CVSS 7.5 (HIGH).</li><li class="w"><span class="g">!</span>Insecure client-side token storage: 1 finding(s), worst CVSS 6.1 (MEDIUM).</li></ul>
+        </div>
+        <div class="assess-col">
+          <h3 class="neutral">Not Vulnerable To</h3>
+          <ul><li class="f empty">Every checked class had a finding.</li></ul>
+        </div>
+      </div>
+
+  <h2 class="sect">Findings</h2>
+  <table>
+            <thead><tr><th>#</th><th>CVSS</th><th>Severity</th><th>Type / Vector</th><th>Source</th><th>Location</th><th>Detail</th></tr></thead>
+            <tbody><tr>
+                  <td class="idx">1</td>
+                  <td><span class="score" style="--c:#dc2626">9.8</span></td>
+                  <td><span class="pill" style="--c:#dc2626">CRITICAL</span></td>
+                  <td class="type">Potential SQL Injection (Direct Concatenation)<div class="vec">CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H</div></td>
+                  <td><span class="tag">static</span> SQL Injection</td>
+                  <td class="loc">./vulnerable-targets2\app\api\account\[id]\route.js:6</td>
+                  <td><code>const account = db.prepare(&quot;SELECT * FROM accounts WHERE id = &quot; + params.id).get();</code></td>
+                </tr><tr>
+                  <td class="idx">2</td>
+                  <td><span class="score" style="--c:#dc2626">9.8</span></td>
+                  <td><span class="pill" style="--c:#dc2626">CRITICAL</span></td>
+                  <td class="type">Potential SQL Injection (Direct Concatenation)<div class="vec">CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H</div></td>
+                  <td><span class="tag">static</span> SQL Injection</td>
+                  <td class="loc">./vulnerable-targets2\app\api\payment\route.js:7</td>
+                  <td><code>const query = `INSERT INTO payments (user_id, amount) VALUES (${userId}, ${amount})`;</code></td>
+                </tr><tr>
+                  <td class="idx">3</td>
+                  <td><span class="score" style="--c:#dc2626">9.8</span></td>
+                  <td><span class="pill" style="--c:#dc2626">CRITICAL</span></td>
+                  <td class="type">Potential SQL Injection (Direct Concatenation)<div class="vec">CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H</div></td>
+                  <td><span class="tag">static</span> SQL Injection</td>
+                  <td class="loc">./vulnerable-targets2\lib\db.js:7</td>
+                  <td><code>return db.prepare(&quot;SELECT * FROM users WHERE email = &#x27;&quot; + email + &quot;&#x27;&quot;).get();</code></td>
+                </tr><tr>
+                  <td class="idx">4</td>
+                  <td><span class="score" style="--c:#dc2626">9.1</span></td>
+                  <td><span class="pill" style="--c:#dc2626">CRITICAL</span></td>
+                  <td class="type">Insecure JWT: &#x27;none&#x27; algorithm accepted<div class="vec">CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N</div></td>
+                  <td><span class="tag">static</span> Weak JWT Config</td>
+                  <td class="loc">./vulnerable-targets2\lib\auth.js:6</td>
+                  <td><code>return jwt.verify(token, &quot;secret&quot;, { algorithms: [&quot;none&quot;], ignoreExpiration: true });</code></td>
+                </tr><tr>
+                  <td class="idx">5</td>
+                  <td><span class="score" style="--c:#dc2626">9.1</span></td>
+                  <td><span class="pill" style="--c:#dc2626">CRITICAL</span></td>
+                  <td class="type">Insecure JWT: predictable secret key is hardcoded<div class="vec">CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N</div></td>
+                  <td><span class="tag">static</span> Weak JWT Config</td>
+                  <td class="loc">./vulnerable-targets2\lib\auth.js:6</td>
+                  <td><code>return jwt.verify(token, &quot;secret&quot;, { algorithms: [&quot;none&quot;], ignoreExpiration: true });</code></td>
+                </tr><tr>
+                  <td class="idx">6</td>
+                  <td><span class="score" style="--c:#dc2626">9.1</span></td>
+                  <td><span class="pill" style="--c:#dc2626">CRITICAL</span></td>
+                  <td class="type">Exposed API Token (sk- format)<div class="vec">CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:N</div></td>
+                  <td><span class="tag">static</span> Hardcoded Secret</td>
+                  <td class="loc">./vulnerable-targets2\lib\config.js:2</td>
+                  <td><code>export const API_KEY = &quot;sk-1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p&quot;;</code></td>
+                </tr><tr>
+                  <td class="idx">7</td>
+                  <td><span class="score" style="--c:#ea580c">8.2</span></td>
+                  <td><span class="pill" style="--c:#ea580c">HIGH</span></td>
+                  <td class="type">Missing Route Authentication for Sensitive Endpoints<div class="vec">CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N</div></td>
+                  <td><span class="tag">static</span> Missing Authorization</td>
+                  <td class="loc">./vulnerable-targets2\app\api\account\[id]\route.js:1</td>
+                  <td><code>File &#x27;route.js&#x27; lacks recognized auth checks.</code></td>
+                </tr><tr>
+                  <td class="idx">8</td>
+                  <td><span class="score" style="--c:#ea580c">8.2</span></td>
+                  <td><span class="pill" style="--c:#ea580c">HIGH</span></td>
+                  <td class="type">Missing Route Authentication for Sensitive Endpoints<div class="vec">CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:L/A:N</div></td>
+                  <td><span class="tag">static</span> Missing Authorization</td>
+                  <td class="loc">./vulnerable-targets2\app\api\payment\route.js:1</td>
+                  <td><code>File &#x27;route.js&#x27; lacks recognized auth checks.</code></td>
+                </tr><tr>
+                  <td class="idx">9</td>
+                  <td><span class="score" style="--c:#ea580c">7.5</span></td>
+                  <td><span class="pill" style="--c:#ea580c">HIGH</span></td>
+                  <td class="type">Unsafe password comparison (Plaintext)<div class="vec">CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N</div></td>
+                  <td><span class="tag">static</span> Plaintext Password</td>
+                  <td class="loc">./vulnerable-targets2\app\api\auth\login\route.js:9</td>
+                  <td><code>if (user &amp;&amp; user.password === password) {</code></td>
+                </tr><tr>
+                  <td class="idx">10</td>
+                  <td><span class="score" style="--c:#ea580c">7.5</span></td>
+                  <td><span class="pill" style="--c:#ea580c">HIGH</span></td>
+                  <td class="type">Predictable Variable Name<div class="vec">CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N</div></td>
+                  <td><span class="tag">static</span> Hardcoded Secret</td>
+                  <td class="loc">./vulnerable-targets2\lib\config.js:2</td>
+                  <td><code>export const API_KEY = &quot;sk-1a2b3c4d5e6f7g8h9i0j1k2l3m4n5o6p&quot;;</code></td>
+                </tr><tr>
+                  <td class="idx">11</td>
+                  <td><span class="score" style="--c:#ea580c">7.5</span></td>
+                  <td><span class="pill" style="--c:#ea580c">HIGH</span></td>
+                  <td class="type">Predictable Variable Name<div class="vec">CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N</div></td>
+                  <td><span class="tag">static</span> Hardcoded Secret</td>
+                  <td class="loc">./vulnerable-targets2\lib\config.js:3</td>
+                  <td><code>export const JWT_SECRET = &quot;supersecret&quot;;</code></td>
+                </tr><tr>
+                  <td class="idx">12</td>
+                  <td><span class="score" style="--c:#ea580c">7.5</span></td>
+                  <td><span class="pill" style="--c:#ea580c">HIGH</span></td>
+                  <td class="type">Predictable Variable Name<div class="vec">CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:N/A:N</div></td>
+                  <td><span class="tag">static</span> Hardcoded Secret</td>
+                  <td class="loc">./vulnerable-targets2\lib\config.js:4</td>
+                  <td><code>export const DB_PASSWORD = &quot;admin123&quot;;</code></td>
+                </tr><tr>
+                  <td class="idx">13</td>
+                  <td><span class="score" style="--c:#d97706">6.5</span></td>
+                  <td><span class="pill" style="--c:#d97706">MEDIUM</span></td>
+                  <td class="type">Broken Object-Level (IDOR) Risk<div class="vec">CVSS:3.1/AV:N/AC:L/PR:L/UI:N/S:U/C:H/I:N/A:N</div></td>
+                  <td><span class="tag">static</span> Missing Authorization</td>
+                  <td class="loc">./vulnerable-targets2\app\api\account\[id]\route.js:1</td>
+                  <td><code>File &#x27;route.js&#x27; takes [id] parameter but lacks explicit ownership validation.</code></td>
+                </tr><tr>
+                  <td class="idx">14</td>
+                  <td><span class="score" style="--c:#d97706">6.5</span></td>
+                  <td><span class="pill" style="--c:#d97706">MEDIUM</span></td>
+                  <td class="type">Insecure JWT: ignoreExpiration = true<div class="vec">CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:L/I:L/A:N</div></td>
+                  <td><span class="tag">static</span> Weak JWT Config</td>
+                  <td class="loc">./vulnerable-targets2\lib\auth.js:6</td>
+                  <td><code>return jwt.verify(token, &quot;secret&quot;, { algorithms: [&quot;none&quot;], ignoreExpiration: true });</code></td>
+                </tr><tr>
+                  <td class="idx">15</td>
+                  <td><span class="score" style="--c:#d97706">6.1</span></td>
+                  <td><span class="pill" style="--c:#d97706">MEDIUM</span></td>
+                  <td class="type">Insecure token storage (XSS Risk)<div class="vec">CVSS:3.1/AV:N/AC:L/PR:N/UI:R/S:C/C:L/I:L/A:N</div></td>
+                  <td><span class="tag">static</span> Insecure Storage</td>
+                  <td class="loc">./vulnerable-targets2\app\login\page.js:11</td>
+                  <td><code>localStorage.setItem(&quot;token&quot;, data.token);</code></td>
+                </tr><tr>
+                  <td class="idx">16</td>
+                  <td><span class="score" style="--c:#d97706">5.3</span></td>
+                  <td><span class="pill" style="--c:#d97706">MEDIUM</span></td>
+                  <td class="type">Insecure JWT: Token created without expiresIn flag<div class="vec">CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:L/A:N</div></td>
+                  <td><span class="tag">static</span> Weak JWT Config</td>
+                  <td class="loc">./vulnerable-targets2\lib\auth.js:11</td>
+                  <td><code>return jwt.sign({ id: user.id, email: user.email }, JWT_SECRET);</code></td>
+                </tr></tbody>
+          </table>
+
+  <footer>Generated by Vibe-Coded Website Fuzzer · for authorized, educational testing only.</footer>
+</div>
+</body>
+</html>
